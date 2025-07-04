@@ -15,6 +15,7 @@ import (
 
 var FILL_CAP = 2;
 var FILL_RATE = 2;
+var FILL_GAP = 10;
 
 type RateLimiter struct {
 	fillCapacity int64
@@ -31,20 +32,26 @@ func (r *RateLimiter) LimiterCheck() bool {
 	// substract one token for the request if not rate limited
 	now := time.Now()
 	duration := now.Sub(r.lastRefilled).Seconds();
-	tokensToAdd := int64(duration * float64(r.refillRate))
 
+	var tokensToAdd int64 = 0;
+	if duration > float64(FILL_GAP) {
 
-	if tokensToAdd > 0 {
-
-		if r.tokens+tokensToAdd > r.fillCapacity {
-			r.tokens = r.fillCapacity
-		} else {
-			r.tokens += tokensToAdd
-		}
-
-		r.lastRefilled = now
+		tokensToAdd = int64(duration * float64(r.refillRate))
+		
+		
+		if tokensToAdd > 0 {
+			
+			if r.tokens+tokensToAdd > r.fillCapacity {
+				r.tokens = r.fillCapacity
+				} else {
+					r.tokens += tokensToAdd
+				}
+				
+				r.lastRefilled = now
+			}
+			
 	}
-
+	
 	fmt.Printf(">=====RATE LIMIT INFO=====<\nTOKENS=%d\nTOADD=%d\nCAPACITY=%d\nDURATION=%f\n", r.tokens, tokensToAdd, r.fillCapacity, duration)
 	if r.tokens >= 1 {
 		r.tokens -= 1
@@ -90,6 +97,12 @@ var IPRMap *IPRateLimiterMap
 // Inits the rate limiter with defaults
 func InitCatto() {
 	IPRMap = InitIPRateLimiterMap()
+}
+
+func ConfigureCatto(capacity int64, rate int64, fillGap int64) {
+	FILL_CAP = int(capacity);
+	FILL_RATE = int(rate)
+	FILL_GAP = int(fillGap)
 }
 
 func CattoMiddleware(next http.Handler) http.Handler {
