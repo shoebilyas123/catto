@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +12,9 @@ import (
 // - Uses token bucket algorithm
 // - Uses IP based rate limiting technique
 // - Refil rate is defined in tokens per seconds
+
+var FILL_CAP = 2;
+var FILL_RATE = 2;
 
 type RateLimiter struct {
 	fillCapacity int64
@@ -28,8 +30,9 @@ func (r *RateLimiter) LimiterCheck() bool {
 	// add the number of tokens required but make sure to overflow them if they exceed the fillCapacity
 	// substract one token for the request if not rate limited
 	now := time.Now()
-	duration := now.Sub(r.lastRefilled).Seconds()
-	tokensToAdd := int64(math.Floor(duration * float64(r.refillRate)))
+	duration := now.Sub(r.lastRefilled).Seconds();
+	tokensToAdd := int64(duration * float64(r.refillRate))
+
 
 	if tokensToAdd > 0 {
 
@@ -45,6 +48,7 @@ func (r *RateLimiter) LimiterCheck() bool {
 	fmt.Printf(">=====RATE LIMIT INFO=====<\nTOKENS=%d\nTOADD=%d\nCAPACITY=%d\nDURATION=%f\n", r.tokens, tokensToAdd, r.fillCapacity, duration)
 	if r.tokens >= 1 {
 		r.tokens -= 1
+		fmt.Println(r.tokens);
 		return true
 	}
 
@@ -56,12 +60,13 @@ type IPRateLimiterMap struct {
 	limiters map[string]*RateLimiter
 }
 
-func (ipR *IPRateLimiterMap) GetIPRateLimiter(ipAddr string, cap int64, rr int64) *RateLimiter {
+func (ipR *IPRateLimiterMap) GetIPRateLimiter(ipAddr string) *RateLimiter {
 	ipLimiter, isMapped := ipR.limiters[ipAddr]
 
+
 	if !isMapped {
-		ipLimiter = InitRateLimiter(cap, rr)
-		return ipLimiter
+		ipR.limiters[ipAddr] = InitRateLimiter(int64(FILL_CAP), int64(FILL_RATE))
+		return ipR.limiters[ipAddr]
 	}
 
 	return ipLimiter
@@ -87,7 +92,7 @@ func InitCatto() {
 	IPRMap = InitIPRateLimiterMap()
 }
 
-func CattoMiddleware(next http.Handler, capacity int64, refillRate int64) http.Handler {
+func CattoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIPAddr := strings.Split(r.RemoteAddr, ":")[0]
 
@@ -96,8 +101,8 @@ func CattoMiddleware(next http.Handler, capacity int64, refillRate int64) http.H
 			http.Error(w, "Something went wrong", http.StatusInternalServerError)
 			return
 		}
-
-		rateLimiter := IPRMap.GetIPRateLimiter(clientIPAddr, capacity, refillRate)
+		
+		rateLimiter := IPRMap.GetIPRateLimiter(clientIPAddr)
 
 		w.Header().Set("X-Ratelimit-Remaining", fmt.Sprintf("%d", rateLimiter.tokens))
 		w.Header().Set("X-Ratelimit-Limit", fmt.Sprintf("%d", rateLimiter.fillCapacity))
@@ -123,7 +128,7 @@ func main() {
 	InitCatto()
 	mux := http.NewServeMux()
 
-	mux.Handle("/", CattoMiddleware(http.HandlerFunc(homeHandler), 2, 2))
+	mux.Handle("/", CattoMiddleware(http.HandlerFunc(homeHandler)))
 	log.Print("Listening on :3000...")
 	err := http.ListenAndServe(":3000", mux)
 	log.Fatal(err)
