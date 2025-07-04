@@ -17,14 +17,14 @@ var FILL_CAP = 2;
 var FILL_RATE = 2;
 var FILL_GAP = 10;
 
-type RateLimiter struct {
+type LimiterTokenBucket struct {
 	fillCapacity int64
 	tokens       int64
 	refillRate   int64
 	lastRefilled time.Time
 }
 
-func (r *RateLimiter) LimiterCheck() bool {
+func (r *LimiterTokenBucket) LimiterCheck() bool {
 
 	// get the current time
 	// get the time elapsed between now and last refilled time
@@ -63,11 +63,11 @@ func (r *RateLimiter) LimiterCheck() bool {
 
 }
 
-type IPRateLimiterMap struct {
-	limiters map[string]*RateLimiter
+type IPBucketStore struct {
+	limiters map[string]*LimiterTokenBucket
 }
 
-func (ipR *IPRateLimiterMap) GetIPRateLimiter(ipAddr string) *RateLimiter {
+func (ipR *IPBucketStore) GetIPRateLimiter(ipAddr string) *LimiterTokenBucket {
 	ipLimiter, isMapped := ipR.limiters[ipAddr]
 
 
@@ -79,11 +79,11 @@ func (ipR *IPRateLimiterMap) GetIPRateLimiter(ipAddr string) *RateLimiter {
 	return ipLimiter
 }
 
-func InitIPRateLimiterMap() *IPRateLimiterMap {
-	return &IPRateLimiterMap{limiters: make(map[string]*RateLimiter)}
+func InitIPRateLimiterMap() *IPBucketStore {
+	return &IPBucketStore{limiters: make(map[string]*LimiterTokenBucket)}
 }
-func InitRateLimiter(_cap int64, _rate int64) *RateLimiter {
-	return &RateLimiter{
+func InitRateLimiter(_cap int64, _rate int64) *LimiterTokenBucket {
+	return &LimiterTokenBucket{
 		fillCapacity: _cap,
 		refillRate:   _rate,
 		tokens:       _cap,
@@ -92,7 +92,7 @@ func InitRateLimiter(_cap int64, _rate int64) *RateLimiter {
 }
 
 // Global variable stores the list of rate limiters by mapping each IP with it's rate limiter object
-var IPRMap *IPRateLimiterMap
+var IPRMap *IPBucketStore
 
 // Inits the rate limiter with defaults
 func InitCatto() {
